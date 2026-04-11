@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compound Interest Calculator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 1.5rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: #1e2130;
+      border: 1px solid #2d3347;
+      border-radius: 1rem;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 1.25rem;
+    }
+
+    .field { margin-bottom: 1.1rem; }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 0.35rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      background: #131620;
+      border: 1px solid #2d3347;
+      border-radius: 0.5rem;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.12);
+    }
+
+    input[type="range"] {
+      padding: 0;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      accent-color: #60a5fa;
+    }
+
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .range-row input[type="number"] {
+      width: 80px;
+      flex-shrink: 0;
+    }
+
+    .range-row input[type="range"] { flex: 1; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid #2d3347;
+    }
+
+    .stat {
+      background: #131620;
+      border-radius: 0.6rem;
+      padding: 0.75rem;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.3rem;
+    }
+
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .stat-value.green  { color: #34d399; }
+    .stat-value.blue   { color: #60a5fa; }
+    .stat-value.purple { color: #a78bfa; }
+    .stat-value.orange { color: #fb923c; }
+
+    .chart-card { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    .chart-wrap {
+      position: relative;
+      height: 320px;
+    }
+
+    /* Breakdown table */
+    .table-wrap {
+      overflow-y: auto;
+      max-height: 240px;
+      border-radius: 0.6rem;
+      border: 1px solid #2d3347;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #161925;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.6rem 0.9rem;
+      text-align: right;
+    }
+
+    thead th:first-child { text-align: left; }
+
+    tbody tr { border-top: 1px solid #1e2130; }
+
+    tbody tr:hover { background: #1a1f2e; }
+
+    tbody td {
+      padding: 0.5rem 0.9rem;
+      text-align: right;
+      color: #cbd5e1;
+    }
+
+    tbody td:first-child { text-align: left; color: #94a3b8; }
+
+    .interest-cell { color: #34d399; }
+
+    .formula {
+      font-size: 0.78rem;
+      color: #475569;
+      text-align: center;
+      padding: 0.6rem;
+      background: #131620;
+      border-radius: 0.5rem;
+      font-family: 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Compound Interest Calculator</h1>
+<p class="subtitle">A = P (1 + r/n)<sup>nt</sup></p>
+
+<div class="layout">
+
+  <!-- ── Controls ── -->
+  <div class="card">
+    <h2>Parameters</h2>
+
+    <div class="field">
+      <label for="principal">Principal ($)</label>
+      <div class="range-row">
+        <input type="number" id="principal" value="10000" min="1" max="10000000" step="500" />
+        <input type="range" id="principalRange" min="1000" max="500000" step="1000" value="10000" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="rate">Annual Interest Rate (%)</label>
+      <div class="range-row">
+        <input type="number" id="rate" value="7" min="0.01" max="100" step="0.1" />
+        <input type="range" id="rateRange" min="0.1" max="30" step="0.1" value="7" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="years">Time Horizon (years)</label>
+      <div class="range-row">
+        <input type="number" id="years" value="20" min="1" max="100" step="1" />
+        <input type="range" id="yearsRange" min="1" max="50" step="1" value="20" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="freq">Compounding Frequency</label>
+      <select id="freq">
+        <option value="1">Annually</option>
+        <option value="2">Semi-Annually</option>
+        <option value="4">Quarterly</option>
+        <option value="12" selected>Monthly</option>
+        <option value="52">Weekly</option>
+        <option value="365">Daily</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="contrib">Monthly Contribution ($)</label>
+      <div class="range-row">
+        <input type="number" id="contrib" value="0" min="0" max="100000" step="50" />
+        <input type="range" id="contribRange" min="0" max="5000" step="50" value="0" />
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-label">Final Balance</div>
+        <div class="stat-value blue" id="statFinal">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Interest</div>
+        <div class="stat-value green" id="statInterest">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Invested</div>
+        <div class="stat-value purple" id="statInvested">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Return</div>
+        <div class="stat-value orange" id="statReturn">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chart + Table ── -->
+  <div class="chart-card">
+    <div class="card">
+      <h2>Growth Over Time</h2>
+      <div class="chart-wrap">
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Year-by-Year Breakdown</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Balance</th>
+              <th>Invested</th>
+              <th>Interest Earned</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <p class="formula" id="formulaDisplay" style="margin-top:0.75rem;"></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Helpers ────────────────────────────────────────────────────
+  const fmt = (n) =>
+    '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  const pct = (n) => n.toFixed(2) + '%';
+
+  // ── Sync paired number/range inputs ───────────────────────────
+  function syncPair(numberId, rangeId) {
+    const num = document.getElementById(numberId);
+    const range = document.getElementById(rangeId);
+    num.addEventListener('input', () => { range.value = num.value; calculate(); });
+    range.addEventListener('input', () => { num.value = range.value; calculate(); });
+  }
+
+  syncPair('principal', 'principalRange');
+  syncPair('rate',      'rateRange');
+  syncPair('years',     'yearsRange');
+  syncPair('contrib',   'contribRange');
+  document.getElementById('freq').addEventListener('change', calculate);
+
+  // ── Chart setup ────────────────────────────────────────────────
+  const ctx = document.getElementById('chart').getContext('2d');
+
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Total Balance',
+          data: [],
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96,165,250,0.10)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          borderWidth: 2.5,
+        },
+        {
+          label: 'Total Invested',
+          data: [],
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167,139,250,0.07)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          borderDash: [5, 4],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#94a3b8', boxWidth: 14, padding: 16, font: { size: 12 } },
+        },
+        tooltip: {
+          backgroundColor: '#1e2130',
+          borderColor: '#2d3347',
+          borderWidth: 1,
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          padding: 10,
+          callbacks: {
+            label: (item) => ` ${item.dataset.label}: ${fmt(item.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: '#1e2130' },
+          ticks: { color: '#475569', maxTicksLimit: 10 },
+        },
+        y: {
+          grid: { color: '#222638' },
+          ticks: {
+            color: '#475569',
+            callback: (v) => '$' + (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v / 1e3).toFixed(0) + 'k'),
+          },
+        },
+      },
+    },
+  });
+
+  // ── Core calculation ───────────────────────────────────────────
+  function calculate() {
+    const P = parseFloat(document.getElementById('principal').value) || 0;
+    const r = parseFloat(document.getElementById('rate').value) / 100 || 0;
+    const t = parseInt(document.getElementById('years').value) || 1;
+    const n = parseInt(document.getElementById('freq').value) || 12;
+    const m = parseFloat(document.getElementById('contrib').value) || 0; // monthly
+
+    const labels = [];
+    const balances = [];
+    const invested = [];
+    const rows = [];
+
+    let balance = P;
+
+    for (let y = 1; y <= t; y++) {
+      // Compound each period within the year
+      const periodsPerYear = n;
+      const ratePerPeriod = r / n;
+      const monthlyPeriods = 12 / n; // how many months per compounding period
+
+      for (let p = 0; p < periodsPerYear; p++) {
+        // Add monthly contributions that fall within this compounding period
+        balance += m * monthlyPeriods;
+        balance *= (1 + ratePerPeriod);
+      }
+
+      const totalInvested = P + m * 12 * y;
+      const interestEarned = balance - totalInvested;
+
+      labels.push('Yr ' + y);
+      balances.push(balance);
+      invested.push(totalInvested);
+      rows.push({ year: y, balance, totalInvested, interestEarned });
+    }
+
+    // Update chart
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = balances;
+    chart.data.datasets[1].data = invested;
+    chart.update('none');
+
+    // Update stats
+    const finalBalance = balances[balances.length - 1] ?? 0;
+    const totalInvested = P + m * 12 * t;
+    const totalInterest = finalBalance - totalInvested;
+    const returnPct = totalInvested > 0 ? (totalInterest / totalInvested) * 100 : 0;
+
+    document.getElementById('statFinal').textContent    = fmt(finalBalance);
+    document.getElementById('statInterest').textContent = fmt(totalInterest);
+    document.getElementById('statInvested').textContent = fmt(totalInvested);
+    document.getElementById('statReturn').textContent   = pct(returnPct);
+
+    // Update table
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = rows.map(row => `
+      <tr>
+        <td>${row.year}</td>
+        <td>${fmt(row.balance)}</td>
+        <td>${fmt(row.totalInvested)}</td>
+        <td class="interest-cell">${fmt(row.interestEarned)}</td>
+      </tr>
+    `).join('');
+
+    // Update formula display
+    const freqLabel = document.getElementById('freq').selectedOptions[0].text;
+    document.getElementById('formulaDisplay').textContent =
+      `A = ${fmt(P)} × (1 + ${pct(r)}/n)^(n×${t})   |   n = ${n} (${freqLabel})` +
+      (m > 0 ? `   +   ${fmt(m)}/mo contributions` : '');
+  }
+
+  // Initial render
+  calculate();
+</script>
+</body>
+</html>
