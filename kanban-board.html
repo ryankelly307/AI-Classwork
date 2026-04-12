@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Board</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #1a1d2e;
+      border-bottom: 1px solid #2d3148;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header svg { color: #7c6af7; }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #f1f5f9;
+    }
+
+    .board {
+      flex: 1;
+      display: flex;
+      gap: 20px;
+      padding: 28px 32px;
+      overflow-x: auto;
+      align-items: flex-start;
+    }
+
+    .column {
+      flex: 1;
+      min-width: 280px;
+      max-width: 360px;
+      background: #1a1d2e;
+      border-radius: 12px;
+      border: 1px solid #2d3148;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 130px);
+    }
+
+    .column-header {
+      padding: 16px 18px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #2d3148;
+      flex-shrink: 0;
+    }
+
+    .column-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .col-todo    .column-dot { background: #64748b; }
+    .col-inprog  .column-dot { background: #7c6af7; }
+    .col-done    .column-dot { background: #22c55e; }
+
+    .col-todo    .column-header { border-top: 3px solid #64748b; border-radius: 12px 12px 0 0; }
+    .col-inprog  .column-header { border-top: 3px solid #7c6af7; border-radius: 12px 12px 0 0; }
+    .col-done    .column-header { border-top: 3px solid #22c55e; border-radius: 12px 12px 0 0; }
+
+    .column-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      flex: 1;
+    }
+
+    .column-count {
+      font-size: 0.75rem;
+      background: #2d3148;
+      color: #94a3b8;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .card-list {
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 60px;
+    }
+
+    .card-list::-webkit-scrollbar { width: 4px; }
+    .card-list::-webkit-scrollbar-track { background: transparent; }
+    .card-list::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 4px; }
+
+    .card {
+      background: #242741;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: grab;
+      transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
+      position: relative;
+    }
+
+    .card:hover {
+      border-color: #4a4d6e;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+
+    .card:active { cursor: grabbing; }
+
+    .card.sortable-ghost {
+      opacity: 0.35;
+      transform: scale(0.97);
+    }
+
+    .card.sortable-drag {
+      opacity: 0.95;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      border-color: #7c6af7;
+      cursor: grabbing;
+    }
+
+    .card-text {
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+      word-break: break-word;
+      padding-right: 24px;
+    }
+
+    .card-text[contenteditable="true"] {
+      outline: none;
+      border-bottom: 1px dashed #7c6af7;
+      cursor: text;
+    }
+
+    .card-delete {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 4px;
+      line-height: 1;
+      font-size: 14px;
+      transition: color 0.15s, background 0.15s;
+      display: none;
+    }
+
+    .card:hover .card-delete {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-delete:hover {
+      color: #f87171;
+      background: #3b1c1c;
+    }
+
+    .add-card-btn {
+      margin: 0 12px 12px;
+      padding: 9px 14px;
+      background: transparent;
+      border: 1px dashed #2d3148;
+      border-radius: 8px;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      flex-shrink: 0;
+      width: calc(100% - 24px);
+    }
+
+    .add-card-btn:hover {
+      border-color: #7c6af7;
+      color: #a59df8;
+      background: #1e2035;
+    }
+
+    /* Drop zone highlight */
+    .card-list.drag-over {
+      background: rgba(124, 106, 247, 0.05);
+      border-radius: 8px;
+    }
+
+    /* New card input area */
+    .new-card-form {
+      margin: 0 12px 12px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .new-card-form.visible { display: flex; }
+
+    .new-card-input {
+      background: #242741;
+      border: 1px solid #7c6af7;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #e2e8f0;
+      font-size: 0.92rem;
+      resize: none;
+      line-height: 1.5;
+      font-family: inherit;
+      outline: none;
+      min-height: 72px;
+    }
+
+    .new-card-input::placeholder { color: #4a5568; }
+
+    .new-card-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-confirm {
+      padding: 7px 16px;
+      background: #7c6af7;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-confirm:hover { background: #6558e8; }
+
+    .btn-cancel {
+      padding: 7px 14px;
+      background: transparent;
+      border: 1px solid #2d3148;
+      border-radius: 6px;
+      color: #64748b;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-cancel:hover { border-color: #475569; color: #94a3b8; }
+
+    /* Drop target placeholder */
+    .sortable-placeholder {
+      background: rgba(124, 106, 247, 0.08);
+      border: 2px dashed #4a3faa;
+      border-radius: 8px;
+      height: 60px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="18" rx="1"/>
+    <rect x="14" y="3" width="7" height="11" rx="1"/>
+    <rect x="14" y="17" width="7" height="4" rx="1"/>
+  </svg>
+  <h1>Kanban Board</h1>
+</header>
+
+<div class="board" id="board">
+
+  <!-- To Do -->
+  <div class="column col-todo" data-col="todo">
+    <div class="column-header">
+      <div class="column-dot"></div>
+      <span class="column-title">To Do</span>
+      <span class="column-count">0</span>
+    </div>
+    <div class="card-list" id="list-todo"></div>
+    <button class="add-card-btn" onclick="openForm('todo')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add a card
+    </button>
+    <div class="new-card-form" id="form-todo">
+      <textarea class="new-card-input" id="input-todo" placeholder="What needs to be done?" rows="3"></textarea>
+      <div class="new-card-actions">
+        <button class="btn-confirm" onclick="addCard('todo')">Add Card</button>
+        <button class="btn-cancel" onclick="closeForm('todo')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- In Progress -->
+  <div class="column col-inprog" data-col="inprog">
+    <div class="column-header">
+      <div class="column-dot"></div>
+      <span class="column-title">In Progress</span>
+      <span class="column-count">0</span>
+    </div>
+    <div class="card-list" id="list-inprog"></div>
+    <button class="add-card-btn" onclick="openForm('inprog')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add a card
+    </button>
+    <div class="new-card-form" id="form-inprog">
+      <textarea class="new-card-input" id="input-inprog" placeholder="What's being worked on?" rows="3"></textarea>
+      <div class="new-card-actions">
+        <button class="btn-confirm" onclick="addCard('inprog')">Add Card</button>
+        <button class="btn-cancel" onclick="closeForm('inprog')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done -->
+  <div class="column col-done" data-col="done">
+    <div class="column-header">
+      <div class="column-dot"></div>
+      <span class="column-title">Done</span>
+      <span class="column-count">0</span>
+    </div>
+    <div class="card-list" id="list-done"></div>
+    <button class="add-card-btn" onclick="openForm('done')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add a card
+    </button>
+    <div class="new-card-form" id="form-done">
+      <textarea class="new-card-input" id="input-done" placeholder="What was completed?" rows="3"></textarea>
+      <div class="new-card-actions">
+        <button class="btn-confirm" onclick="addCard('done')">Add Card</button>
+        <button class="btn-cancel" onclick="closeForm('done')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  const STORAGE_KEY = 'kanban_v1';
+  const COLUMNS = ['todo', 'inprog', 'done'];
+
+  const DEFAULT_DATA = {
+    todo: [
+      { id: uid(), text: 'Design landing page mockup' },
+      { id: uid(), text: 'Set up CI/CD pipeline' },
+      { id: uid(), text: 'Write unit tests for auth module' },
+    ],
+    inprog: [
+      { id: uid(), text: 'Implement user authentication' },
+      { id: uid(), text: 'Integrate payment gateway' },
+    ],
+    done: [
+      { id: uid(), text: 'Initialize project repository' },
+      { id: uid(), text: 'Define database schema' },
+    ],
+  };
+
+  function uid() {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : DEFAULT_DATA;
+    } catch {
+      return DEFAULT_DATA;
+    }
+  }
+
+  function save(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function createCardEl(card) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.dataset.id = card.id;
+
+    const text = document.createElement('div');
+    text.className = 'card-text';
+    text.textContent = card.text;
+    // Double-click to edit inline
+    text.addEventListener('dblclick', () => {
+      text.contentEditable = 'true';
+      text.focus();
+      // place cursor at end
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    text.addEventListener('blur', () => {
+      text.contentEditable = 'false';
+      const newText = text.textContent.trim();
+      if (!newText) {
+        text.textContent = card.text; // revert if empty
+      } else {
+        card.text = newText;
+        persist();
+      }
+    });
+    text.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); }
+      if (e.key === 'Escape') { text.textContent = card.text; text.blur(); }
+    });
+
+    const del = document.createElement('button');
+    del.className = 'card-delete';
+    del.title = 'Delete card';
+    del.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    del.addEventListener('click', () => deleteCard(card.id));
+
+    div.appendChild(text);
+    div.appendChild(del);
+    return div;
+  }
+
+  function renderAll() {
+    const data = load();
+    COLUMNS.forEach(col => {
+      const list = document.getElementById('list-' + col);
+      list.innerHTML = '';
+      (data[col] || []).forEach(card => list.appendChild(createCardEl(card)));
+      updateCount(col, (data[col] || []).length);
+    });
+  }
+
+  function updateCount(col, n) {
+    const header = document.querySelector(`.col-${col} .column-count`);
+    if (header) header.textContent = n;
+  }
+
+  // ── Persistence helper ─────────────────────────────────────────────────────
+  function persist() {
+    const data = {};
+    COLUMNS.forEach(col => {
+      const list = document.getElementById('list-' + col);
+      data[col] = Array.from(list.querySelectorAll('.card')).map(el => ({
+        id: el.dataset.id,
+        text: el.querySelector('.card-text').textContent.trim(),
+      }));
+      updateCount(col, data[col].length);
+    });
+    save(data);
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  function deleteCard(id) {
+    const el = document.querySelector(`.card[data-id="${id}"]`);
+    if (!el) return;
+    el.style.transition = 'opacity 0.2s, transform 0.2s';
+    el.style.opacity = '0';
+    el.style.transform = 'scale(0.9)';
+    setTimeout(() => { el.remove(); persist(); }, 200);
+  }
+
+  function openForm(col) {
+    // Close any other open forms first
+    COLUMNS.forEach(c => {
+      if (c !== col) closeForm(c);
+    });
+    const form = document.getElementById('form-' + col);
+    const btn  = form.previousElementSibling;
+    form.classList.add('visible');
+    btn.style.display = 'none';
+    document.getElementById('input-' + col).focus();
+  }
+
+  function closeForm(col) {
+    const form = document.getElementById('form-' + col);
+    const btn  = form.previousElementSibling;
+    form.classList.remove('visible');
+    btn.style.display = '';
+    document.getElementById('input-' + col).value = '';
+  }
+
+  function addCard(col) {
+    const input = document.getElementById('input-' + col);
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+
+    const card = { id: uid(), text };
+    const list = document.getElementById('list-' + col);
+    const el = createCardEl(card);
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-6px)';
+    list.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity 0.2s, transform 0.2s';
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    });
+
+    persist();
+    closeForm(col);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  // Allow Enter (without shift) to submit the form
+  COLUMNS.forEach(col => {
+    document.getElementById('input-' + col).addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addCard(col); }
+      if (e.key === 'Escape') closeForm(col);
+    });
+  });
+
+  // ── Drag & Drop via SortableJS ─────────────────────────────────────────────
+  const sortables = COLUMNS.map(col =>
+    Sortable.create(document.getElementById('list-' + col), {
+      group: 'kanban',          // shared group → cross-column drag
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      chosenClass: 'sortable-chosen',
+      forceFallback: false,
+      onEnd() { persist(); },
+    })
+  );
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+  renderAll();
+</script>
+</body>
+</html>
