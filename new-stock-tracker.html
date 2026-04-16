@@ -113,10 +113,13 @@
 <script>
 const COLORS = ['#00ff9f','#ff6b35','#4ecdc4','#ffe66d','#a78bfa','#f472b6','#60a5fa','#fb923c'];
 
-// CORS proxy chain — tries each in order until one succeeds
-const PROXIES = [
+// CORS proxy chain — tries each in order, with a per-attempt timeout
+const PROXY_FNS = [
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+  url => url,  // direct last — works if Yahoo Finance ever relaxes CORS
 ];
 
 let stocks = {}, priceChart = null, epsChart = null;
@@ -152,17 +155,22 @@ function tsToDate(ts) {
 }
 
 async function corsGet(url) {
+  const TIMEOUT_MS = 7000;
   let lastErr;
-  for (const makeProxy of PROXIES) {
+  for (const makeProxy of PROXY_FNS) {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
-      const res = await fetch(makeProxy(url));
+      const res = await fetch(makeProxy(url), { signal: ctrl.signal });
+      clearTimeout(tid);
       if (res.ok) return res;
       lastErr = new Error(`HTTP ${res.status}`);
     } catch(e) {
-      lastErr = e;
+      clearTimeout(tid);
+      lastErr = e.name === 'AbortError' ? new Error('Timed out') : e;
     }
   }
-  throw new Error(`Unable to reach Yahoo Finance (${lastErr?.message}). Check your connection.`);
+  throw new Error(`All data sources failed (${lastErr?.message}). Try again in a moment.`);
 }
 
 async function fetchStockData(ticker, range) {
