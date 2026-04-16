@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Stock Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --border: #1e1e2e;
+    --accent: #00ff9f; --accent2: #ff6b35; --text: #e8e8f0;
+    --muted: #5a5a7a; --panel: #0f0f18;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,255,159,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,159,0.025) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 2rem; }
+  header { display: flex; align-items: center; gap: 2rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .logo { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .tagline { font-size: 0.72rem; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+  .badge { display: inline-flex; align-items: center; gap: 0.4rem; font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0.3rem 0.6rem; margin-left: auto; }
+  .badge-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .input-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
+  .ticker-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 1rem; padding: 0.7rem 1.25rem; border-radius: 4px; outline: none; width: 160px; text-transform: uppercase; letter-spacing: 0.12em; transition: border-color 0.2s; }
+  .ticker-input::placeholder { text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .ticker-input:focus { border-color: var(--accent); }
+  .range-select { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 0.9rem; padding: 0.7rem 1rem; border-radius: 4px; outline: none; cursor: pointer; }
+  button { font-family: 'Space Mono', monospace; font-size: 0.82rem; padding: 0.7rem 1.4rem; border: none; border-radius: 4px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-add { background: var(--accent); color: #000; font-weight: 700; }
+  .btn-add:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+  .btn-clear { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-clear:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; min-height: 2rem; }
+  .chip { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.75rem; border-radius: 3px; font-family: 'Space Mono', monospace; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; border: 1px solid; }
+  .chip .remove { cursor: pointer; opacity: 0.5; font-size: 1rem; line-height: 1; transition: opacity 0.15s; }
+  .chip .remove:hover { opacity: 1; }
+  .status { font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted); margin-bottom: 1rem; min-height: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .status.loading { color: var(--accent); }
+  .status.error { color: var(--accent2); }
+  .spinner { width: 10px; height: 10px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+  .loading .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 1.5rem; }
+  .chart-label { font-family: 'Space Mono', monospace; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 0.3rem; }
+  .chart-title { font-size: 1rem; font-weight: 500; color: var(--text); margin-bottom: 1rem; }
+  .chart-wrap { position: relative; height: 280px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .summary-card { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid; border-radius: 6px; padding: 1rem 1.25rem; }
+  .card-ticker { font-family: 'Space Mono', monospace; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
+  .card-name { font-size: 0.7rem; color: var(--muted); margin-bottom: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-row { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.2rem; }
+  .card-row span:last-child { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text); }
+  .pos { color: #00ff9f !important; } .neg { color: #ff6b35 !important; }
+  .empty { text-align: center; padding: 5rem 2rem; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 0.8rem; line-height: 2.2; }
+  .empty .icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.25; }
+  .note { font-size: 0.7rem; color: var(--muted); font-family: 'Space Mono', monospace; line-height: 1.7; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="logo">STOCK<span>CMP</span></div>
+      <div class="tagline">Multi-Stock Comparison Tool</div>
+    </div>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Yahoo Finance &mdash; No API Key
+    </div>
+  </header>
+
+  <div class="input-row">
+    <input class="ticker-input" id="tickerInput" type="text" placeholder="e.g. AAPL" maxlength="10" />
+    <select class="range-select" id="rangeSelect">
+      <option value="1y" selected>1 Year</option>
+      <option value="2y">2 Years</option>
+      <option value="5y">5 Years</option>
+    </select>
+    <button class="btn-add" id="addBtn">+ ADD</button>
+    <button class="btn-clear" id="clearBtn">CLEAR ALL</button>
+  </div>
+
+  <div class="chips" id="chips"></div>
+  <div class="status" id="status">
+    <span class="spinner"></span>
+    <span id="statusText">Enter a ticker symbol above to get started.</span>
+  </div>
+
+  <div id="mainContent">
+    <div class="empty">
+      <div class="icon">&#x1F4C8;</div>
+      Enter a ticker symbol and click ADD.<br>
+      Pulls live price &amp; EPS data from Yahoo Finance.<br>
+      No API key or account required.
+    </div>
+  </div>
+
+  <div class="note">
+    Data sourced from Yahoo Finance via public API. No API key required. EPS reflects quarterly actuals for the selected time range. Not financial advice.
+  </div>
+</div>
+
+<script>
+const COLORS = ['#00ff9f','#ff6b35','#4ecdc4','#ffe66d','#a78bfa','#f472b6','#60a5fa','#fb923c'];
+
+// CORS proxy chain — tries each in order until one succeeds
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+let stocks = {}, priceChart = null, epsChart = null;
+
+const tickerInput = document.getElementById('tickerInput');
+const addBtn      = document.getElementById('addBtn');
+const clearBtn    = document.getElementById('clearBtn');
+const chipsEl     = document.getElementById('chips');
+const statusEl    = document.getElementById('status');
+const statusText  = document.getElementById('statusText');
+const mainContent = document.getElementById('mainContent');
+const rangeSelect = document.getElementById('rangeSelect');
+
+function setStatus(msg, type='') {
+  statusText.textContent = msg;
+  statusEl.className = 'status ' + type;
+}
+
+function fmt(n, d=2) {
+  if (n == null || isNaN(n)) return '\u2014';
+  return n.toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+
+function pctChange(arr) {
+  const v = arr.filter(x => x != null);
+  if (v.length < 2) return null;
+  return ((v[v.length-1] - v[0]) / v[0]) * 100;
+}
+
+function tsToDate(ts) {
+  if (!ts) return null;
+  return new Date(ts * 1000).toISOString().slice(0, 10);
+}
+
+async function corsGet(url) {
+  let lastErr;
+  for (const makeProxy of PROXIES) {
+    try {
+      const res = await fetch(makeProxy(url));
+      if (res.ok) return res;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch(e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Unable to reach Yahoo Finance (${lastErr?.message}). Check your connection.`);
+}
+
+async function fetchStockData(ticker, range) {
+  const sym = ticker.toUpperCase();
+
+  // Chart endpoint: price history + embedded quarterly earnings events
+  const chartUrl =
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}` +
+    `?interval=1mo&range=${range}&events=earnings`;
+
+  const chartRes = await corsGet(chartUrl);
+  const chartJson = await chartRes.json();
+
+  const result = chartJson?.chart?.result?.[0];
+  if (!result) {
+    const desc = chartJson?.chart?.error?.description || 'Ticker not found or no data available.';
+    throw new Error(desc);
+  }
+
+  // --- Price history ---
+  const timestamps = result.timestamp || [];
+  const closes     = result.indicators?.quote?.[0]?.close || [];
+  const priceHistory = timestamps
+    .map((ts, i) => ({ date: tsToDate(ts), close: closes[i] }))
+    .filter(p => p.date && p.close != null && !isNaN(p.close))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- EPS from chart earnings events (covers full selected range) ---
+  const earningsEvents = result.events?.earnings || {};
+  let epsHistory = Object.values(earningsEvents)
+    .map(e => ({ date: tsToDate(e.date), eps: e.epsActual ?? null }))
+    .filter(e => e.date && e.eps != null && !isNaN(e.eps))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- Supplement EPS with quoteSummary earningsHistory (last ~4 quarters, reliable) ---
+  try {
+    const epsUrl =
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}` +
+      `?modules=earningsHistory`;
+    const epsRes  = await corsGet(epsUrl);
+    const epsJson = await epsRes.json();
+    const history = epsJson?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
+    const supplemental = history
+      .map(e => ({ date: tsToDate(e.quarter?.raw), eps: e.epsActual?.raw ?? null }))
+      .filter(e => e.date && e.eps != null && !isNaN(e.eps));
+
+    // Merge: use a Map keyed by date so duplicates collapse
+    const epsMap = new Map(epsHistory.map(e => [e.date, e]));
+    supplemental.forEach(e => epsMap.set(e.date, e));
+    epsHistory = [...epsMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+  } catch(_) {
+    // Non-fatal: proceed with whatever chart events returned
+  }
+
+  const meta         = result.meta || {};
+  const name         = meta.longName || meta.shortName || sym;
+  const currentPrice = meta.regularMarketPrice
+    ?? priceHistory[priceHistory.length - 1]?.close
+    ?? 0;
+
+  return { ticker: sym, name, currentPrice, priceHistory, epsHistory };
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
+function renderChips() {
+  chipsEl.innerHTML = '';
+  Object.entries(stocks).forEach(([t, s]) => {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.style.cssText = `color:${s.color};border-color:${s.color}44;background:${s.color}11`;
+    c.innerHTML = `${t}<span class="remove" data-ticker="${t}">\u00d7</span>`;
+    chipsEl.appendChild(c);
+  });
+  chipsEl.querySelectorAll('.remove').forEach(el =>
+    el.addEventListener('click', () => removeTicker(el.dataset.ticker))
+  );
+}
+
+function buildDatasets(key) {
+  const allDates = [...new Set(
+    Object.values(stocks).flatMap(s =>
+      (key === 'price' ? s.priceHistory : s.epsHistory).map(p => p.date)
+    )
+  )].sort();
+  return {
+    labels: allDates,
+    datasets: Object.entries(stocks).map(([t, s]) => {
+      const arr = key === 'price' ? s.priceHistory : s.epsHistory;
+      const map = Object.fromEntries(arr.map(p => [p.date, key === 'price' ? p.close : p.eps]));
+      return {
+        label: t, data: allDates.map(d => map[d] ?? null),
+        borderColor: s.color, backgroundColor: s.color + '22',
+        borderWidth: 2, pointRadius: key === 'eps' ? 5 : 0,
+        pointHoverRadius: 7, pointBackgroundColor: s.color,
+        tension: 0.3, spanGaps: true, fill: false,
+      };
+    })
+  };
+}
+
+function chartOpts(prefix) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: {duration: 500},
+    interaction: {mode: 'index', intersect: false},
+    plugins: {
+      legend: {labels: {color: '#8888aa', font: {family: 'Space Mono', size: 10}, boxWidth: 12, padding: 14}},
+      tooltip: {
+        backgroundColor: '#12121a', borderColor: '#1e1e2e', borderWidth: 1,
+        titleColor: '#e8e8f0', bodyColor: '#8888aa',
+        titleFont: {family: 'Space Mono', size: 11}, bodyFont: {family: 'DM Sans', size: 12},
+        callbacks: {label: ctx => ` ${ctx.dataset.label}: ${prefix}${fmt(ctx.parsed.y)}`}
+      }
+    },
+    scales: {
+      x: {ticks: {color: '#5a5a7a', font: {family: 'Space Mono', size: 9}, maxTicksLimit: 8, maxRotation: 0}, grid: {color: '#1a1a28'}},
+      y: {ticks: {color: '#5a5a7a', font: {family: 'Space Mono', size: 9}, callback: v => prefix + fmt(v, 0)}, grid: {color: '#1a1a28'}}
+    }
+  };
+}
+
+function renderSummary() {
+  return Object.entries(stocks).map(([t, s]) => {
+    const change    = pctChange(s.priceHistory.map(p => p.close));
+    const latestEps = s.epsHistory.length ? s.epsHistory[s.epsHistory.length - 1].eps : null;
+    const cls  = change == null ? '' : change >= 0 ? 'pos' : 'neg';
+    const sign = change != null && change >= 0 ? '+' : '';
+    return `<div class="summary-card" style="border-left-color:${s.color}">
+      <div class="card-ticker" style="color:${s.color}">${t}</div>
+      <div class="card-name" title="${s.name || t}">${s.name || t}</div>
+      <div class="card-row"><span>Current Price</span><span>$${fmt(s.currentPrice)}</span></div>
+      <div class="card-row"><span>Period Change</span><span class="${cls}">${change == null ? '\u2014' : sign + fmt(change) + '%'}</span></div>
+      <div class="card-row"><span>Latest EPS</span><span>${latestEps == null ? '\u2014' : '$' + fmt(latestEps)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAll() {
+  if (!Object.keys(stocks).length) {
+    mainContent.innerHTML = `<div class="empty"><div class="icon">&#x1F4C8;</div>Enter a ticker symbol and click ADD.<br>Pulls live price &amp; EPS data from Yahoo Finance.<br>No API key or account required.</div>`;
+    priceChart = epsChart = null;
+    return;
+  }
+  mainContent.innerHTML = `
+    <div class="summary-grid">${renderSummary()}</div>
+    <div class="charts-grid">
+      <div class="chart-panel">
+        <div class="chart-label">Price History</div>
+        <div class="chart-title">Monthly Close Price (USD)</div>
+        <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">Earnings Per Share</div>
+        <div class="chart-title">Quarterly EPS \u2014 Actual Reported (USD)</div>
+        <div class="chart-wrap"><canvas id="epsChart"></canvas></div>
+      </div>
+    </div>`;
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(document.getElementById('priceChart').getContext('2d'),
+    {type: 'line', data: buildDatasets('price'), options: chartOpts('$')});
+  if (epsChart) epsChart.destroy();
+  epsChart = new Chart(document.getElementById('epsChart').getContext('2d'),
+    {type: 'line', data: buildDatasets('eps'), options: chartOpts('$')});
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+
+async function addTicker(raw) {
+  const ticker = raw.trim().toUpperCase();
+  if (!ticker) return;
+  if (stocks[ticker])              { setStatus(`${ticker} already loaded.`, 'error'); return; }
+  if (Object.keys(stocks).length >= 8) { setStatus('Max 8 tickers.', 'error'); return; }
+
+  setStatus(`Fetching ${ticker}\u2026`, 'loading');
+  addBtn.disabled = tickerInput.disabled = true;
+
+  try {
+    const result = await fetchStockData(ticker, rangeSelect.value);
+    if (!result.priceHistory.length) throw new Error('No price data returned \u2014 check the ticker symbol.');
+    stocks[ticker] = {color: COLORS[Object.keys(stocks).length % COLORS.length], ...result};
+    renderChips(); renderAll();
+    setStatus(`Loaded ${ticker} \u2014 ${result.priceHistory.length} price points, ${result.epsHistory.length} EPS quarters.`);
+    tickerInput.value = '';
+  } catch(e) {
+    setStatus(`Error: ${e.message}`, 'error');
+  }
+
+  addBtn.disabled = tickerInput.disabled = false;
+  tickerInput.focus();
+}
+
+function removeTicker(ticker) {
+  delete stocks[ticker];
+  Object.values(stocks).forEach((s, i) => s.color = COLORS[i % COLORS.length]);
+  renderChips(); renderAll();
+  setStatus(`Removed ${ticker}.`);
+}
+
+addBtn.addEventListener('click', () => addTicker(tickerInput.value));
+tickerInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(tickerInput.value); });
+clearBtn.addEventListener('click', () => {
+  stocks = {};
+  if (priceChart) { priceChart.destroy(); priceChart = null; }
+  if (epsChart)   { epsChart.destroy();   epsChart   = null; }
+  renderChips(); renderAll(); setStatus('Cleared.');
+});
+rangeSelect.addEventListener('change', async () => {
+  if (!Object.keys(stocks).length) return;
+  const tickers = Object.keys(stocks);
+  addBtn.disabled = true;
+  for (const ticker of tickers) {
+    try {
+      setStatus(`Refreshing ${ticker}\u2026`, 'loading');
+      const r = await fetchStockData(ticker, rangeSelect.value);
+      stocks[ticker] = {...stocks[ticker], ...r};
+    } catch(e) {
+      setStatus(`Error refreshing ${ticker}: ${e.message}`, 'error');
+    }
+  }
+  renderAll();
+  setStatus(`Updated ${tickers.length} ticker(s) for ${rangeSelect.value} range.`);
+  addBtn.disabled = false;
+});
+</script>
+</body>
+</html>
