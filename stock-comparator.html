@@ -24,18 +24,9 @@
   .logo { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: var(--accent); }
   .logo span { color: var(--text); }
   .tagline { font-size: 0.72rem; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; }
-  .ai-badge { display: inline-flex; align-items: center; gap: 0.4rem; font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0.3rem 0.6rem; margin-left: auto; }
-  .ai-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+  .badge { display: inline-flex; align-items: center; gap: 0.4rem; font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0.3rem 0.6rem; margin-left: auto; }
+  .badge-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  .api-key-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: center; flex-wrap: wrap; }
-  .api-key-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.82rem; padding: 0.55rem 1rem; border-radius: 4px; outline: none; flex: 1; min-width: 260px; max-width: 480px; transition: border-color 0.2s; }
-  .api-key-input::placeholder { color: var(--muted); }
-  .api-key-input:focus { border-color: var(--accent); }
-  .api-key-label { font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.06em; }
-  .api-key-saved { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--accent); opacity: 0; transition: opacity 0.3s; }
-  .api-key-saved.show { opacity: 1; }
-
   .input-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: center; }
   .ticker-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 1rem; padding: 0.7rem 1.25rem; border-radius: 4px; outline: none; width: 160px; text-transform: uppercase; letter-spacing: 0.12em; transition: border-color 0.2s; }
   .ticker-input::placeholder { text-transform: none; letter-spacing: 0; color: var(--muted); }
@@ -82,17 +73,11 @@
       <div class="logo">STOCK<span>CMP</span></div>
       <div class="tagline">Multi-Stock Comparison Tool</div>
     </div>
-    <div class="ai-badge">
-      <span class="ai-dot"></span>
-      Claude + Web Search
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Yahoo Finance &mdash; No API Key
     </div>
   </header>
-
-  <div class="api-key-row">
-    <span class="api-key-label">API KEY</span>
-    <input class="api-key-input" id="apiKeyInput" type="password" placeholder="sk-ant-..." />
-    <span class="api-key-saved" id="apiKeySaved">Saved</span>
-  </div>
 
   <div class="input-row">
     <input class="ticker-input" id="tickerInput" type="text" placeholder="e.g. AAPL" maxlength="10" />
@@ -108,29 +93,34 @@
   <div class="chips" id="chips"></div>
   <div class="status" id="status">
     <span class="spinner"></span>
-    <span id="statusText">Enter your Anthropic API key and a ticker above to get started.</span>
+    <span id="statusText">Enter a ticker symbol above to get started.</span>
   </div>
 
   <div id="mainContent">
     <div class="empty">
       <div class="icon">&#x1F4C8;</div>
       Enter a ticker symbol and click ADD.<br>
-      Claude fetches live price &amp; EPS data via web search.<br>
-      Requires an Anthropic API key (stored locally in your browser).
+      Pulls live price &amp; EPS data from Yahoo Finance.<br>
+      No API key or account required.
     </div>
   </div>
 
   <div class="note">
-    Uses Claude AI with live web search to retrieve price history and EPS data. Results may take 10-20 seconds per ticker. Your API key is stored only in localStorage and never sent anywhere except the Anthropic API. Not financial advice.
+    Data sourced from Yahoo Finance via public API. No API key required. EPS reflects quarterly actuals for the selected time range. Not financial advice.
   </div>
 </div>
 
 <script>
 const COLORS = ['#00ff9f','#ff6b35','#4ecdc4','#ffe66d','#a78bfa','#f472b6','#60a5fa','#fb923c'];
+
+// CORS proxy chain — tries each in order until one succeeds
+const PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
 let stocks = {}, priceChart = null, epsChart = null;
 
-const apiKeyInput = document.getElementById('apiKeyInput');
-const apiKeySaved = document.getElementById('apiKeySaved');
 const tickerInput = document.getElementById('tickerInput');
 const addBtn      = document.getElementById('addBtn');
 const clearBtn    = document.getElementById('clearBtn');
@@ -139,25 +129,6 @@ const statusEl    = document.getElementById('status');
 const statusText  = document.getElementById('statusText');
 const mainContent = document.getElementById('mainContent');
 const rangeSelect = document.getElementById('rangeSelect');
-
-// Restore API key from localStorage
-const savedKey = localStorage.getItem('stockcmp_api_key');
-if (savedKey) apiKeyInput.value = savedKey;
-
-apiKeyInput.addEventListener('input', () => {
-  const key = apiKeyInput.value.trim();
-  if (key) {
-    localStorage.setItem('stockcmp_api_key', key);
-    apiKeySaved.classList.add('show');
-    setTimeout(() => apiKeySaved.classList.remove('show'), 1500);
-  } else {
-    localStorage.removeItem('stockcmp_api_key');
-  }
-});
-
-function getApiKey() {
-  return apiKeyInput.value.trim();
-}
 
 function setStatus(msg, type='') {
   statusText.textContent = msg;
@@ -175,64 +146,87 @@ function pctChange(arr) {
   return ((v[v.length-1] - v[0]) / v[0]) * 100;
 }
 
+function tsToDate(ts) {
+  if (!ts) return null;
+  return new Date(ts * 1000).toISOString().slice(0, 10);
+}
+
+async function corsGet(url) {
+  let lastErr;
+  for (const makeProxy of PROXIES) {
+    try {
+      const res = await fetch(makeProxy(url));
+      if (res.ok) return res;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch(e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Unable to reach Yahoo Finance (${lastErr?.message}). Check your connection.`);
+}
+
 async function fetchStockData(ticker, range) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('Enter your Anthropic API key first.');
+  const sym = ticker.toUpperCase();
 
-  const years = range === '1y' ? 1 : range === '2y' ? 2 : 5;
-  const startYear = new Date().getFullYear() - years;
+  // Chart endpoint: price history + embedded quarterly earnings events
+  const chartUrl =
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}` +
+    `?interval=1mo&range=${range}&events=earnings`;
 
-  const prompt = `You are a financial data API. Return ONLY valid JSON, no markdown fences, no explanation, no extra text.
+  const chartRes = await corsGet(chartUrl);
+  const chartJson = await chartRes.json();
 
-Search the web for historical stock data for: ${ticker}
-Time range: last ${years} year(s), from ${startYear} to present.
-
-Find:
-1. Monthly closing prices in USD
-2. Quarterly EPS (actual reported earnings per share)
-3. Company full name and current price
-
-Return EXACTLY this structure with no other text:
-{"ticker":"${ticker}","name":"Full Company Name","currentPrice":0.00,"priceHistory":[{"date":"YYYY-MM-DD","close":0.00}],"epsHistory":[{"date":"YYYY-MM-DD","eps":0.00}]}
-
-Rules:
-- priceHistory: ~12-60 monthly data points sorted oldest to newest
-- epsHistory: quarterly actual EPS sorted oldest to newest (empty array if unavailable)
-- All values are plain numbers, no dollar signs or strings
-- Dates in YYYY-MM-DD format
-- Return ONLY the JSON object`;
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'anthropic-beta': 'web-search-2025-03-05'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250514',
-      max_tokens: 4000,
-      tools: [{type: 'web_search_20250305', name: 'web_search'}],
-      messages: [{role: 'user', content: prompt}]
-    })
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    if (res.status === 401) throw new Error('Invalid API key. Check your Anthropic key.');
-    if (res.status === 429) throw new Error('Rate limited. Wait a moment and try again.');
-    throw new Error(`API error ${res.status}: ${errBody.slice(0, 120)}`);
+  const result = chartJson?.chart?.result?.[0];
+  if (!result) {
+    const desc = chartJson?.chart?.error?.description || 'Ticker not found or no data available.';
+    throw new Error(desc);
   }
 
-  const data = await res.json();
-  const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
-  const clean = text.replace(/```json|```/gi, '').trim();
-  const s = clean.indexOf('{'), e = clean.lastIndexOf('}');
-  if (s === -1 || e === -1) throw new Error('No JSON in response \u2014 try again');
-  return JSON.parse(clean.slice(s, e+1));
+  // --- Price history ---
+  const timestamps = result.timestamp || [];
+  const closes     = result.indicators?.quote?.[0]?.close || [];
+  const priceHistory = timestamps
+    .map((ts, i) => ({ date: tsToDate(ts), close: closes[i] }))
+    .filter(p => p.date && p.close != null && !isNaN(p.close))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- EPS from chart earnings events (covers full selected range) ---
+  const earningsEvents = result.events?.earnings || {};
+  let epsHistory = Object.values(earningsEvents)
+    .map(e => ({ date: tsToDate(e.date), eps: e.epsActual ?? null }))
+    .filter(e => e.date && e.eps != null && !isNaN(e.eps))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // --- Supplement EPS with quoteSummary earningsHistory (last ~4 quarters, reliable) ---
+  try {
+    const epsUrl =
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}` +
+      `?modules=earningsHistory`;
+    const epsRes  = await corsGet(epsUrl);
+    const epsJson = await epsRes.json();
+    const history = epsJson?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
+    const supplemental = history
+      .map(e => ({ date: tsToDate(e.quarter?.raw), eps: e.epsActual?.raw ?? null }))
+      .filter(e => e.date && e.eps != null && !isNaN(e.eps));
+
+    // Merge: use a Map keyed by date so duplicates collapse
+    const epsMap = new Map(epsHistory.map(e => [e.date, e]));
+    supplemental.forEach(e => epsMap.set(e.date, e));
+    epsHistory = [...epsMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+  } catch(_) {
+    // Non-fatal: proceed with whatever chart events returned
+  }
+
+  const meta         = result.meta || {};
+  const name         = meta.longName || meta.shortName || sym;
+  const currentPrice = meta.regularMarketPrice
+    ?? priceHistory[priceHistory.length - 1]?.close
+    ?? 0;
+
+  return { ticker: sym, name, currentPrice, priceHistory, epsHistory };
 }
+
+// ── Rendering ────────────────────────────────────────────────────────────────
 
 function renderChips() {
   chipsEl.innerHTML = '';
@@ -251,18 +245,18 @@ function renderChips() {
 function buildDatasets(key) {
   const allDates = [...new Set(
     Object.values(stocks).flatMap(s =>
-      (key==='price' ? s.priceHistory : s.epsHistory).map(p => p.date)
+      (key === 'price' ? s.priceHistory : s.epsHistory).map(p => p.date)
     )
   )].sort();
   return {
     labels: allDates,
     datasets: Object.entries(stocks).map(([t, s]) => {
-      const arr = key==='price' ? s.priceHistory : s.epsHistory;
-      const map = Object.fromEntries(arr.map(p => [p.date, key==='price' ? p.close : p.eps]));
+      const arr = key === 'price' ? s.priceHistory : s.epsHistory;
+      const map = Object.fromEntries(arr.map(p => [p.date, key === 'price' ? p.close : p.eps]));
       return {
         label: t, data: allDates.map(d => map[d] ?? null),
-        borderColor: s.color, backgroundColor: s.color+'22',
-        borderWidth: 2, pointRadius: key==='eps' ? 5 : 0,
+        borderColor: s.color, backgroundColor: s.color + '22',
+        borderWidth: 2, pointRadius: key === 'eps' ? 5 : 0,
         pointHoverRadius: 7, pointBackgroundColor: s.color,
         tension: 0.3, spanGaps: true, fill: false,
       };
@@ -270,43 +264,45 @@ function buildDatasets(key) {
   };
 }
 
-const chartOpts = (prefix) => ({
-  responsive: true, maintainAspectRatio: false, animation: {duration:500},
-  interaction: {mode:'index', intersect:false},
-  plugins: {
-    legend: {labels: {color:'#8888aa', font:{family:'Space Mono',size:10}, boxWidth:12, padding:14}},
-    tooltip: {
-      backgroundColor:'#12121a', borderColor:'#1e1e2e', borderWidth:1,
-      titleColor:'#e8e8f0', bodyColor:'#8888aa',
-      titleFont:{family:'Space Mono',size:11}, bodyFont:{family:'DM Sans',size:12},
-      callbacks: {label: ctx => ` ${ctx.dataset.label}: ${prefix}${fmt(ctx.parsed.y)}`}
+function chartOpts(prefix) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: {duration: 500},
+    interaction: {mode: 'index', intersect: false},
+    plugins: {
+      legend: {labels: {color: '#8888aa', font: {family: 'Space Mono', size: 10}, boxWidth: 12, padding: 14}},
+      tooltip: {
+        backgroundColor: '#12121a', borderColor: '#1e1e2e', borderWidth: 1,
+        titleColor: '#e8e8f0', bodyColor: '#8888aa',
+        titleFont: {family: 'Space Mono', size: 11}, bodyFont: {family: 'DM Sans', size: 12},
+        callbacks: {label: ctx => ` ${ctx.dataset.label}: ${prefix}${fmt(ctx.parsed.y)}`}
+      }
+    },
+    scales: {
+      x: {ticks: {color: '#5a5a7a', font: {family: 'Space Mono', size: 9}, maxTicksLimit: 8, maxRotation: 0}, grid: {color: '#1a1a28'}},
+      y: {ticks: {color: '#5a5a7a', font: {family: 'Space Mono', size: 9}, callback: v => prefix + fmt(v, 0)}, grid: {color: '#1a1a28'}}
     }
-  },
-  scales: {
-    x: {ticks:{color:'#5a5a7a',font:{family:'Space Mono',size:9},maxTicksLimit:8,maxRotation:0}, grid:{color:'#1a1a28'}},
-    y: {ticks:{color:'#5a5a7a',font:{family:'Space Mono',size:9},callback:v=>prefix+fmt(v,0)}, grid:{color:'#1a1a28'}}
-  }
-});
+  };
+}
 
 function renderSummary() {
   return Object.entries(stocks).map(([t, s]) => {
-    const change = pctChange(s.priceHistory.map(p => p.close));
-    const latestEps = s.epsHistory.length ? s.epsHistory[s.epsHistory.length-1].eps : null;
-    const cls = change == null ? '' : change >= 0 ? 'pos' : 'neg';
+    const change    = pctChange(s.priceHistory.map(p => p.close));
+    const latestEps = s.epsHistory.length ? s.epsHistory[s.epsHistory.length - 1].eps : null;
+    const cls  = change == null ? '' : change >= 0 ? 'pos' : 'neg';
     const sign = change != null && change >= 0 ? '+' : '';
     return `<div class="summary-card" style="border-left-color:${s.color}">
       <div class="card-ticker" style="color:${s.color}">${t}</div>
-      <div class="card-name">${s.name || t}</div>
+      <div class="card-name" title="${s.name || t}">${s.name || t}</div>
       <div class="card-row"><span>Current Price</span><span>$${fmt(s.currentPrice)}</span></div>
-      <div class="card-row"><span>Period Change</span><span class="${cls}">${change==null?'\u2014':sign+fmt(change)+'%'}</span></div>
-      <div class="card-row"><span>Latest EPS</span><span>${latestEps==null?'\u2014':'$'+fmt(latestEps)}</span></div>
+      <div class="card-row"><span>Period Change</span><span class="${cls}">${change == null ? '\u2014' : sign + fmt(change) + '%'}</span></div>
+      <div class="card-row"><span>Latest EPS</span><span>${latestEps == null ? '\u2014' : '$' + fmt(latestEps)}</span></div>
     </div>`;
   }).join('');
 }
 
 function renderAll() {
   if (!Object.keys(stocks).length) {
-    mainContent.innerHTML = `<div class="empty"><div class="icon">&#x1F4C8;</div>Enter a ticker symbol and click ADD.<br>Claude fetches live price &amp; EPS data via web search.<br>Requires an Anthropic API key (stored locally in your browser).</div>`;
+    mainContent.innerHTML = `<div class="empty"><div class="icon">&#x1F4C8;</div>Enter a ticker symbol and click ADD.<br>Pulls live price &amp; EPS data from Yahoo Finance.<br>No API key or account required.</div>`;
     priceChart = epsChart = null;
     return;
   }
@@ -326,25 +322,26 @@ function renderAll() {
     </div>`;
   if (priceChart) priceChart.destroy();
   priceChart = new Chart(document.getElementById('priceChart').getContext('2d'),
-    {type:'line', data:buildDatasets('price'), options:chartOpts('$')});
+    {type: 'line', data: buildDatasets('price'), options: chartOpts('$')});
   if (epsChart) epsChart.destroy();
   epsChart = new Chart(document.getElementById('epsChart').getContext('2d'),
-    {type:'line', data:buildDatasets('eps'), options:chartOpts('$')});
+    {type: 'line', data: buildDatasets('eps'), options: chartOpts('$')});
 }
+
+// ── Actions ──────────────────────────────────────────────────────────────────
 
 async function addTicker(raw) {
   const ticker = raw.trim().toUpperCase();
   if (!ticker) return;
-  if (!getApiKey()) { setStatus('Enter your Anthropic API key first.', 'error'); apiKeyInput.focus(); return; }
-  if (stocks[ticker]) { setStatus(`${ticker} already loaded.`, 'error'); return; }
+  if (stocks[ticker])              { setStatus(`${ticker} already loaded.`, 'error'); return; }
   if (Object.keys(stocks).length >= 8) { setStatus('Max 8 tickers.', 'error'); return; }
 
-  setStatus(`Searching for ${ticker} data\u2026`, 'loading');
+  setStatus(`Fetching ${ticker}\u2026`, 'loading');
   addBtn.disabled = tickerInput.disabled = true;
 
   try {
     const result = await fetchStockData(ticker, rangeSelect.value);
-    if (!result.priceHistory?.length) throw new Error('No price data returned \u2014 check the ticker symbol.');
+    if (!result.priceHistory.length) throw new Error('No price data returned \u2014 check the ticker symbol.');
     stocks[ticker] = {color: COLORS[Object.keys(stocks).length % COLORS.length], ...result};
     renderChips(); renderAll();
     setStatus(`Loaded ${ticker} \u2014 ${result.priceHistory.length} price points, ${result.epsHistory.length} EPS quarters.`);
@@ -352,20 +349,20 @@ async function addTicker(raw) {
   } catch(e) {
     setStatus(`Error: ${e.message}`, 'error');
   }
+
   addBtn.disabled = tickerInput.disabled = false;
   tickerInput.focus();
 }
 
 function removeTicker(ticker) {
   delete stocks[ticker];
-  // Reassign colors so they stay in order
-  Object.values(stocks).forEach((s,i) => s.color = COLORS[i % COLORS.length]);
+  Object.values(stocks).forEach((s, i) => s.color = COLORS[i % COLORS.length]);
   renderChips(); renderAll();
   setStatus(`Removed ${ticker}.`);
 }
 
 addBtn.addEventListener('click', () => addTicker(tickerInput.value));
-tickerInput.addEventListener('keydown', e => { if (e.key==='Enter') addTicker(tickerInput.value); });
+tickerInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTicker(tickerInput.value); });
 clearBtn.addEventListener('click', () => {
   stocks = {};
   if (priceChart) { priceChart.destroy(); priceChart = null; }
@@ -374,17 +371,19 @@ clearBtn.addEventListener('click', () => {
 });
 rangeSelect.addEventListener('change', async () => {
   if (!Object.keys(stocks).length) return;
-  setStatus('Refreshing all tickers\u2026', 'loading');
+  const tickers = Object.keys(stocks);
   addBtn.disabled = true;
-  for (const ticker of Object.keys(stocks)) {
+  for (const ticker of tickers) {
     try {
       setStatus(`Refreshing ${ticker}\u2026`, 'loading');
       const r = await fetchStockData(ticker, rangeSelect.value);
       stocks[ticker] = {...stocks[ticker], ...r};
-    } catch(e) { setStatus(`Error refreshing ${ticker}: ${e.message}`, 'error'); }
+    } catch(e) {
+      setStatus(`Error refreshing ${ticker}: ${e.message}`, 'error');
+    }
   }
   renderAll();
-  setStatus(`Updated ${Object.keys(stocks).length} ticker(s) for ${rangeSelect.value} range.`);
+  setStatus(`Updated ${tickers.length} ticker(s) for ${rangeSelect.value} range.`);
   addBtn.disabled = false;
 });
 </script>
